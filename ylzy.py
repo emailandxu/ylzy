@@ -11,6 +11,9 @@ import numpy as np
 import queue
 from google.cloud import speech
 import google
+from functools import partial
+
+LOG = {"screen":False, "file":True, "file_path":"./log.txt"}
 
 app = Flask(__name__, template_folder='./')
 app.config['SECRET_KEY'] = 'secret!'
@@ -22,10 +25,18 @@ userVoices = {
 
 }
 
-    
+def _print(*args,**kwargs):
+    print_screen = print
+    print_file = partial(print, file=LOG["file_path"])
+    if LOG["screen"]:
+        __print = print_screen
+    elif LOG["file"]:
+        __print = print_file
+    __print(*args,**kwargs)
+
 @socketio.on('connect_event')
 def connected_msg(msg):
-    print("连接ID：" + request.sid + "触发connect_event", "收到配置参数：",msg)
+    _print("连接ID：" + request.sid + "触发connect_event", "收到配置参数：",msg)
     voiceQueue = queue.Queue()
     userVoices[request.sid]= {
         'voiceQueue': voiceQueue,
@@ -37,12 +48,12 @@ def connected_msg(msg):
         for result in google_ASR(request.sid,**msg):
 
             if result['type'] in ("final"): 
-                print("收到Google解析后的结果{result}".format(result=result))
+                _print("收到Google解析后的结果{result}".format(result=result))
                 try:
                     emit('server_response', {'data':result["result"], "bg":result["bg"].__str__(), "ed": result["ed"].__str__()})
                 except KeyError as e:
                     if "disconnected" in str(e):
-                        print("client was disconnected!!")
+                        _print("client was disconnected!!")
                     else:
                         raise e
             if result['type'] in ("partial"):
@@ -52,14 +63,14 @@ def connected_msg(msg):
                 emit('server_response',{'data': "错误："+ result["result"]})
     
     except Exception as e:
-        print("错误发生在sid:"+request.sid)
+        _print("错误发生在sid:"+request.sid)
         error_msg = "超时！"
         raise e
-        #print(e)
+        #_print(e)
         #emit("server_response",{'data':"连接超时或语音服务异常!"})
     finally:
         #emit("server_response_end",{'data':error_msg},callback=lambda:disconnect())
-        print("end","!"*50)
+        _print("end","!"*50)
         emit("server_response_end",{'data':error_msg})
 
 
@@ -69,8 +80,8 @@ def client_msg(msg):
     try:
         voiceData = msg['voiceData']
     except KeyError as e:
-        print("即将发生键错误，查看发送信息为：")
-        print(msg)
+        _print("即将发生键错误，查看发送信息为：")
+        _print(msg)
         if msg == {}:
             return "client_msg is empty dict!"
         else:
@@ -79,11 +90,11 @@ def client_msg(msg):
          return
     
     import time
-    print("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=request.sid))
+    _print("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=request.sid))
 
     if type(voiceData) == type([0]):
         voiceData = np.array(voiceData,np.int8).tobytes()
-        print("将list int8 转 bytes")
+        _print("将list int8 转 bytes")
 
     voiceQueue.put(voiceData)
     emit("voice_ack",{"data":"received "+ str(len(voiceData)) + " bytes block, continue to push event"})
@@ -116,22 +127,22 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                 try:
                     chunk = voiceQueue.get(timeout=2)
                     if chunk == "EOF":
-                        print("终止生成器")
+                        _print("终止生成器")
                         break
                     f.write(chunk)
-                    print("yield 余下的块")
+                    _print("yield 余下的块")
                     yield chunk
                 except queue.Empty as e:
                     timeoutTime = time.time()
                     timeoutInterval = timeoutTime - lastTimeoutTime
-                    print("yield 0 防止超时")
+                    _print("yield 0 防止超时")
                     if timeoutCnt >7 and timeoutInterval < 20:
                         break
                     else:
                         # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
                         # 如果上一次超时时间间隔超过15秒，重新计算时次数,以此分隔计数区间
                         if timeoutInterval >= 20:
-                            print("进入新的连续超时计数区间")
+                            _print("进入新的连续超时计数区间")
                             lastTimeoutTime = timeoutTime
                             timeoutCnt = 0
                         yield bytes([0,0]) 
@@ -158,14 +169,14 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                 if r.results and r.results[0].alternatives:
                     yield r
         except google.api_core.exceptions.OutOfRange as e:
-            print(e)
-            print("超过305秒， 递归","!"*50)
+            _print(e)
+            _print("超过305秒， 递归","!"*50)
             for r in eternal_response(requests, streaming_config, voiceQueue):
                 yield r
 
     item = {"type":"final","result":"声音异常！！！", "bg":"0","ed":"0"}
 
-    #print("正准备解析")
+    #_print("正准备解析")
     cnt = 0
     num_chars_printed = 0
 
@@ -174,7 +185,7 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
 
     for response in eternal_response(requests, streaming_config, voiceQueue):
         cnt +=1
-        #print("正在为第{cnt}个块进行解析")
+        #_print("正在为第{cnt}个块进行解析")
         if not response.results:
             continue
 
@@ -211,7 +222,7 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
 
         if not result.is_final:
             result = transcript + overwrite_chars + "\n"
-            print(result)
+            _print(result)
             num_chars_printed = len(transcript)
             item = {"type":"partial","result":result}
         else:
