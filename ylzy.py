@@ -76,12 +76,17 @@ def connected_msg(msg):
 
 @socketio.on('voice_push_event')
 def client_msg(msg):
-    voiceQueue = userVoices[request.sid]['voiceQueue']
+    try:
+        voiceQueue = userVoices[request.sid]['voiceQueue']
+    except KeyError as e:
+        _print("发生键错误，可能是用户未在创建链接时调用connected_msg！")
+        _print(str(e))
+        
     try:
         voiceData = msg['voiceData']
     except KeyError as e:
         _print("即将发生键错误，查看发送信息为：")
-        _print(msg)
+        _print(len(msg))
         if msg == {}:
             return "client_msg is empty dict!"
         else:
