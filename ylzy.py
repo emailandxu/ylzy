@@ -27,7 +27,7 @@ userVoices = {
 
 def _print(*args,**kwargs):
     print_screen = print
-    print_file = partial(print, file=LOG["log_file"])
+    print_file = partial(print, file=LOG["log_file"], flush=True)
     if LOG["screen"]:
         __print = print_screen
     elif LOG["file"]:
