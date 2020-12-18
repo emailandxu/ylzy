@@ -13,7 +13,7 @@ from google.cloud import speech
 import google
 from functools import partial
 
-LOG = {"screen":False, "file":True, "file_path":"./log.txt"}
+LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a")}
 
 app = Flask(__name__, template_folder='./')
 app.config['SECRET_KEY'] = 'secret!'
@@ -27,7 +27,7 @@ userVoices = {
 
 def _print(*args,**kwargs):
     print_screen = print
-    print_file = partial(print, file=LOG["file_path"])
+    print_file = partial(print, file=LOG["log_file"])
     if LOG["screen"]:
         __print = print_screen
     elif LOG["file"]:
@@ -81,7 +81,7 @@ def client_msg(msg):
     except KeyError as e:
         _print("发生键错误，可能是用户未在创建链接时调用connected_msg！")
         _print(str(e))
-        
+
     try:
         voiceData = msg['voiceData']
     except KeyError as e:
