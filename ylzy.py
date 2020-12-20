@@ -13,7 +13,7 @@ from google.cloud import speech
 import google
 from functools import partial
 import time
-import datetime
+from datetime import datetime
 import logging
 
 # fix the engineio too many packets in payload bug
