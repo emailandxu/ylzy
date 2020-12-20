@@ -36,6 +36,7 @@ userVoices = {
 LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a"), "debug":False}
 logging.getLogger('socketio').setLevel(logging.ERROR)
 logging.getLogger('engineio').setLevel(logging.ERROR)
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 def _print(*args,**kwargs):
     print_screen = print
@@ -189,8 +190,8 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                 if r.results and r.results[0].alternatives:
                     yield r
         except google.api_core.exceptions.OutOfRange as e:
-            _print_debug(e)
-            _print_debug("超过305秒， 递归","!"*50)
+            _print(e)
+            _print("超过305秒， 递归","!"*50)
             for r in eternal_response(requests, streaming_config, voiceQueue):
                 yield r
 
