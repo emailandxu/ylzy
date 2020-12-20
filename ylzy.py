@@ -33,7 +33,10 @@ RESULT_SAVING_DIR = "./wavAndTxt/"
 userVoices = {
 }
 
+# DIY LOG
 LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a"), "debug":False}
+
+#silent socket.io and flask log
 logging.getLogger('socketio').setLevel(logging.ERROR)
 logging.getLogger('engineio').setLevel(logging.ERROR)
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
@@ -148,7 +151,7 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                 try:
                     chunk = voiceQueue.get(timeout=2)
                     if chunk == "EOF":
-                        _print_debug("终止生成器")
+                        _print("收到EOF")
                         break
                     f.write(chunk)
                     # "yield 余下的块"
