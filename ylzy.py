@@ -12,8 +12,11 @@ import queue
 from google.cloud import speech
 import google
 from functools import partial
+import time
+import datetime
+import logging
 
-LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a"), "debug":False}
+
 
 app = Flask(__name__, template_folder='./')
 app.config['SECRET_KEY'] = 'secret!'
@@ -21,9 +24,17 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 RESULT_SAVING_DIR = "./wavAndTxt/"
-userVoices = {
 
+#    userVoices[request.sid]= {
+#        'voiceQueue': voiceQueue,
+#    }
+userVoices = {
 }
+
+
+LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a"), "debug":False}
+logging.getLogger('socketio').setLevel(logging.ERROR)
+logging.getLogger('engineio').setLevel(logging.ERROR)
 
 def _print(*args,**kwargs):
     print_screen = print
@@ -32,6 +43,7 @@ def _print(*args,**kwargs):
         __print = print_screen
     elif LOG["file"]:
         __print = print_file
+    __print(datetime.now().strftime("%Y-%m-%d %H:%M:%S;"),end="\t")
     __print(*args,**kwargs)
 
 def _print_debug(*args,**kwargs):
@@ -53,7 +65,7 @@ def connected_msg(msg):
         for result in google_ASR(request.sid, **msg):
 
             if result['type'] in ("final"): 
-                _print("收到Google解析后的结果{result}个字符".format(result=len(result)))
+                _print("收到Google解析后的结果{result}个字符".format(result=len(result["result"])))
                 try:
                     emit('server_response', {'data':result["result"], "bg":result["bg"].__str__(), "ed": result["ed"].__str__()})
                 except KeyError as e:
@@ -97,7 +109,6 @@ def client_msg(msg):
     if voiceData is None or len(voiceData)==0:
          return
     
-    import time
     _print_debug("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=request.sid))
 
     if type(voiceData) == type([0]):
