@@ -154,7 +154,7 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                         _print("收到EOF")
                         break
                     else:
-                        print(".",end="")
+                        print(".",end="",flush=True)
                         f.write(chunk)
                         # "yield 音频块"
                         yield chunk
