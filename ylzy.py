@@ -169,8 +169,8 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                         yield bytes([0,0]) 
                         timeoutCnt += 1
 
-    firstItem = voiceQueue.get()
-    voiceQueue.put(firstItem)
+    # 阻塞直到收到下一个语音包为止，否则会报空包错误
+    voiceQueue.put(voiceQueue.get())
     
     audio_generator = audioGenerator(voiceQueue,sid)
     
@@ -192,6 +192,8 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
         except google.api_core.exceptions.OutOfRange as e:
             _print(e)
             _print("超过305秒， 递归","!"*50)
+            # 阻塞直到收到下一个语音包为止，否则会报空包错误
+            voiceQueue.put(voiceQueue.get())
             for r in eternal_response(requests, streaming_config, voiceQueue):
                 yield r
 
