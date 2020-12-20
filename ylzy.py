@@ -68,7 +68,7 @@ def connected_msg(msg):
                 emit('server_response',{'data': "错误："+ result["result"]})
     
     except Exception as e:
-        _print("错误发生在sid:"+request.sid)
+        _print("错误发生在sid:"+request.sid + str(e))
         error_msg = "超时！" + str(e)
         raise e
     finally:
@@ -81,15 +81,15 @@ def client_msg(msg):
     try:
         voiceQueue = userVoices[request.sid]['voiceQueue']
     except KeyError as e:
-        _print("发生键错误，可能是用户未在创建链接时调用connected_msg！")
-        _print(str(e))
+        _print_debug("发生键错误，可能是用户未在创建链接时调用connected_msg！")
+        _print_debug(str(e))
         raise e
 
     try:
         voiceData = msg['voiceData']
     except KeyError as e:
-        _print("即将发生键错误，查看发送信息为：")
-        _print(len(msg))
+        _print_debug("即将发生键错误，查看发送信息为：")
+        _print_debug(len(msg))
         if msg == {}:
             return "client_msg is empty dict!"
         else:
@@ -98,11 +98,11 @@ def client_msg(msg):
          return
     
     import time
-    _print("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=request.sid))
+    _print_debug("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=request.sid))
 
     if type(voiceData) == type([0]):
         voiceData = np.array(voiceData,np.int8).tobytes()
-        _print("将list int8 转 bytes")
+        _print_debug("将list int8 转 bytes")
 
     voiceQueue.put(voiceData)
     emit("voice_ack",{"data":"received "+ str(len(voiceData)) + " bytes block, continue to push event"})
