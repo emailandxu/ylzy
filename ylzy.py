@@ -16,7 +16,9 @@ import time
 import datetime
 import logging
 
-
+# fix the engineio too many packets in payload bug
+from engineio.payload import Payload
+Payload.max_decode_packets = 1000
 
 app = Flask(__name__, template_folder='./')
 app.config['SECRET_KEY'] = 'secret!'
@@ -30,7 +32,6 @@ RESULT_SAVING_DIR = "./wavAndTxt/"
 #    }
 userVoices = {
 }
-
 
 LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a"), "debug":False}
 logging.getLogger('socketio').setLevel(logging.ERROR)
