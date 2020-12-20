@@ -153,9 +153,11 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                     if chunk == "EOF":
                         _print("收到EOF")
                         break
-                    f.write(chunk)
-                    # "yield 余下的块"
-                    yield chunk
+                    else:
+                        print(".",end="")
+                        f.write(chunk)
+                        # "yield 音频块"
+                        yield chunk
                 except queue.Empty as e:
                     timeoutTime = time.time()
                     timeoutInterval = timeoutTime - lastTimeoutTime
