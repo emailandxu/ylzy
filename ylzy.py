@@ -163,6 +163,7 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                     timeoutInterval = timeoutTime - lastTimeoutTime
                     _print_debug("yield 0 防止超时")
                     if timeoutCnt >7 and timeoutInterval < 20:
+                        _print("超时大于重试次数！")
                         break
                     else:
                         # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
