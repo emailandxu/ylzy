@@ -142,7 +142,8 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
         interim_results=True)
 
     def audioGenerator(voiceQueue,sid):
-        import time
+        MAX_RETRY = 7
+        SEP_DURATION = 20
         timename = time.strftime('%Y-%m-%d_%H:%M:%S',time.localtime(time.time()))
         timeoutCnt = 0
         lastTimeoutTime = time.time()
@@ -161,9 +162,8 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                 except queue.Empty as e:
                     timeoutTime = time.time()
                     timeoutInterval = timeoutTime - lastTimeoutTime
-                    _print_debug("yield 0 防止超时")
-                    if timeoutCnt >7 and timeoutInterval < 20:
-                        _print("超时大于重试次数！")
+                    if timeoutCnt >MAX_RETRY and timeoutInterval < SEP_DURATION:
+                        _print("超时重试大于最大重试次数！")
                         break
                     else:
                         # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
@@ -172,6 +172,7 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                             _print_debug("进入新的连续超时计数区间")
                             lastTimeoutTime = timeoutTime
                             timeoutCnt = 0
+                        _print("{sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
                         yield bytes([0,0]) 
                         timeoutCnt += 1
 
@@ -199,11 +200,12 @@ def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
                     yield r
 
         except google.api_core.exceptions.OutOfRange as e:
-            _print(e)
-            _print("超过305秒， 递归","!"*50)
-
-            for r in eternal_response(streaming_config, voiceQueue):
-                yield r
+            if "305" in str(e):
+                _print(sid + "超过305秒， 递归","!"*50)
+                for r in eternal_response(streaming_config, voiceQueue):
+                    yield r
+            else:
+                raise e
 
     item = {"type":"final","result":"声音异常！！！", "bg":"0","ed":"0"}
 
