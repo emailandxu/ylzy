@@ -30,25 +30,25 @@ def recieve_asr_result():
     pubsub.subscribe(ASR_RESULT_CHANNEL)
 
     while True:
-        eventlet.sleep(0.05)
+        eventlet.sleep(0.3)
         item = pubsub.get_message()
         if item is None:
             continue 
-        
+
         if item['type'] != "message":
-            print(item)
+            logx(item)
             continue
 
         output = json.loads(item['data'])
         sid = output["sid"]
         result = output["result"]
         if result['type'] in ("final"): 
-            print("收到Google解析后的结果{result}个字符".format(result=len(result["result"])), sid, sep=";")
+            logx("收到Google解析后的结果{result}个字符".format(result=len(result["result"])), sid, sep=";")
             try:
                 sio.emit('server_response', {'data':result["result"], "bg":result["bg"].__str__(), "ed": result["ed"].__str__()}, room=sid)
             except KeyError as e:
                 if "disconnected" in str(e):
-                    print("client was disconnected!!") # 客户端断开，不会再向服务器器推送音频，语音识别会话也会因此结束。
+                    logx("client was disconnected!!") # 客户端断开，不会再向服务器器推送音频，语音识别会话也会因此结束。
                 else:
                     raise e
         if result['type'] in ("partial"):
@@ -61,12 +61,12 @@ def recieve_asr_result():
 def connected_msg(sid,msg):
     rds.publish(CONNECT_CHANNEL, json.dumps({"sid":sid, "config":msg}))
     sio.emit("connection_established", {'data':"nothing to say, just do it!"})
-    print("连接ID：" + "sid" + "触发connect_event", "收到配置参数：", msg)
+    logx("连接ID：" + "sid" + "触发connect_event", "收到配置参数：", msg)
 
 @sio.event
 def disconnect(sid):
     rds.publish(DISCONNECT_CHANNEL, json.dumps({"sid":sid}))
-    print('disconnect ', sid)
+    logx('disconnect ', sid)
 
 @sio.on('voice_push_event')
 def client_msg(sid,msg):
@@ -100,10 +100,13 @@ def client_msg(sid,msg):
 def run_server():
     eventlet.wsgi.server(eventlet.listen(('', 5000)), app)
 
+def run_exp_server():
+    eventlet.wsgi.server(eventlet.listen(('', 5555)), app)
+
 def setupRedis():
     pool = eventlet.GreenPool()
     pool.spawn(recieve_asr_result)
 
 if __name__ == '__main__':
     eventlet.spawn(recieve_asr_result)
-    run_server()
+    run_exp_server()
