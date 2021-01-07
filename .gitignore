@@ -1,0 +1,12 @@
+.vscode/settings.json
+wavAndTxt/*.wav
+wavAndTxt/*.txt
+venv/
+enable_env.sh
+google_account.json
+.vscode/
+demo/*
+*.pyc
+log.txt
+*.rdb
+.DS_Store

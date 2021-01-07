@@ -1,112 +1,80 @@
 # -*- coding: utf-8 -*-
-import sys
-#reload(sys)
-#sys.setdefaultencoding("utf-8")
 
-from flask import Flask, request
-from flask_socketio import SocketIO, emit, disconnect
-
+import socketio, eventlet
 import numpy as np
-
-import queue
-from google.cloud import speech
-import google
-from functools import partial
-import time
-from datetime import datetime
+from threading import Thread
 import logging
+import redis
+import json
 
-# fix the engineio too many packets in payload bug
-from engineio.payload import Payload
-Payload.max_decode_packets = 1000
+from diy_log import *
+from config import *
 
-app = Flask(__name__, template_folder='./')
-app.config['SECRET_KEY'] = 'secret!'
+rds = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT)
+rds.publish("channel",json.dumps({"msg":"init"}))
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+client_manager = socketio.RedisManager(REDIS_URL)
+sio = socketio.Server(async_mode='eventlet', \
+    client_manager=client_manager, \
+    cors_allowed_origins="*")
+    
+app = socketio.WSGIApp(sio)
 
-RESULT_SAVING_DIR = "./wavAndTxt/"
-
-#    userVoices[request.sid]= {
-#        'voiceQueue': voiceQueue,
-#    }
-userVoices = {
-}
-
-# DIY LOG
-LOG = {"screen":False, "file":True, "log_file":open("./log.txt","a"), "debug":False}
+eventlet.monkey_patch(all=True, os=True, select=True, socket=True, thread=True, time=True) 
 
 #silent socket.io and flask log
-logging.getLogger('socketio').setLevel(logging.ERROR)
-logging.getLogger('engineio').setLevel(logging.ERROR)
-logging.getLogger('werkzeug').setLevel(logging.ERROR)
+logging.getLogger('socketio').setLevel(logging.INFO)
 
-def _print(*args,**kwargs):
-    print_screen = print
-    print_file = partial(print, file=LOG["log_file"], flush=True)
-    if LOG["screen"]:
-        __print = print_screen
-    elif LOG["file"]:
-        __print = print_file
-    __print(datetime.now().strftime("%Y-%m-%d %H:%M:%S;"),end="\t")
-    __print(*args,**kwargs)
+def recieve_asr_result():
+    pubsub = rds.pubsub()
+    pubsub.subscribe(ASR_RESULT_CHANNEL)
 
-def _print_debug(*args,**kwargs):
-    if LOG["debug"]:
-        _print(*args,**kwargs)
+    while True:
+        eventlet.sleep(0.05)
+        item = pubsub.get_message()
+        if item is None:
+            continue 
+        
+        if item['type'] != "message":
+            print(item)
+            continue
 
+        output = json.loads(item['data'])
+        sid = output["sid"]
+        result = output["result"]
+        if result['type'] in ("final"): 
+            print("收到Google解析后的结果{result}个字符".format(result=len(result["result"])), sid, sep=";")
+            try:
+                sio.emit('server_response', {'data':result["result"], "bg":result["bg"].__str__(), "ed": result["ed"].__str__()}, room=sid)
+            except KeyError as e:
+                if "disconnected" in str(e):
+                    print("client was disconnected!!") # 客户端断开，不会再向服务器器推送音频，语音识别会话也会因此结束。
+                else:
+                    raise e
+        if result['type'] in ("partial"):
+            sio.emit("server_partial_response",{'data':result["result"]}, room=sid)
 
-@socketio.on('connect_event')
-def connected_msg(msg):
-    _print("连接ID：" + request.sid + "触发connect_event", "收到配置参数：",msg)
-    voiceQueue = queue.Queue()
-    userVoices[request.sid]= {
-        'voiceQueue': voiceQueue,
-    }
-    emit("connection_established", {'data':"nothing to say, just do it!"})
-    error_msg = "正常！"
+        elif result['type'] == "error":
+            sio.emit('server_response',{'data': "错误："+ result["result"]}, room=sid)
 
-    try:
-        for result in google_ASR(request.sid, **msg):
+@sio.on('connect_event')
+def connected_msg(sid,msg):
+    rds.publish(CONNECT_CHANNEL, json.dumps({"sid":sid, "config":msg}))
+    sio.emit("connection_established", {'data':"nothing to say, just do it!"})
+    print("连接ID：" + "sid" + "触发connect_event", "收到配置参数：", msg)
 
-            if result['type'] in ("final"): 
-                _print("收到Google解析后的结果{result}个字符".format(result=len(result["result"])), request.sid, sep=";")
-                try:
-                    emit('server_response', {'data':result["result"], "bg":result["bg"].__str__(), "ed": result["ed"].__str__()})
-                except KeyError as e:
-                    if "disconnected" in str(e):
-                        _print("client was disconnected!!") # 客户端断开，不会再向服务器器推送音频，语音识别会话也会因此结束。
-                    else:
-                        raise e
-            if result['type'] in ("partial"):
-                emit("server_partial_response",{'data':result["result"]})
+@sio.event
+def disconnect(sid):
+    rds.publish(DISCONNECT_CHANNEL, json.dumps({"sid":sid}))
+    print('disconnect ', sid)
 
-            elif result['type'] == "error":
-                emit('server_response',{'data': "错误："+ result["result"]})
-    
-    except Exception as e:
-        _print("错误发生在sid:"+request.sid + str(e))
-        error_msg = "超时！" + str(e)
-        raise e
-    finally:
-        _print("end","!"*50)
-        emit("server_response_end",{'data':error_msg})
-
-
-@socketio.on('voice_push_event')
-def client_msg(msg):
-    try:
-        voiceQueue = userVoices[request.sid]['voiceQueue']
-    except KeyError as e:
-        _print_debug("发生键错误，可能是用户未在创建链接时调用connected_msg！")
-        _print_debug(str(e))
-        raise e
-
+@sio.on('voice_push_event')
+def client_msg(sid,msg):
     try:
         voiceData = msg['voiceData']
     except KeyError as e:
-        _print_debug("即将发生键错误，查看发送信息为：")
-        _print_debug(len(msg))
+        logx_debug("即将发生键错误，查看发送信息为：")
+        logx_debug(len(msg))
         if msg == {}:
             return "client_msg is empty dict!"
         else:
@@ -114,167 +82,28 @@ def client_msg(msg):
     if voiceData is None or len(voiceData)==0:
          return
     
-    _print_debug("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=request.sid))
+    logx_debug("收到"+ str(type(voiceData)) +"块，大小:{voiceData_len} 来自{sid}".format(voiceData_len=len(voiceData),sid=sid))
 
     if type(voiceData) == type([0]):
         voiceData = np.array(voiceData,np.int8).tobytes()
-        _print_debug("将list int8 转 bytes")
+        logx_debug("将list int8 转 bytes")
 
-    voiceQueue.put(voiceData)
-    emit("voice_ack",{"data":"received "+ str(len(voiceData)) + " bytes block, continue to push event"})
+    if type(voiceData) == str:
+        voiceData = voiceData.encode()
+
+    # json doesn't support serialize bytes
+    rds.publish(AUDIO_CHANNEL, sid.encode() + voiceData )
+    sio.emit("voice_ack",{"data":"received "+ str(len(voiceData)) + " bytes block, continue to push event"})
+
     return "client_msg recieved"
 
+def run_server():
+    eventlet.wsgi.server(eventlet.listen(('', 5000)), app)
 
-def google_ASR(sid,language_code="zh_CN",sample_rate="16000"):
-    voiceQueue = userVoices[sid]['voiceQueue']
-
-    client = speech.SpeechClient()
-    config = speech.types.RecognitionConfig(
-        encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=int(sample_rate),
-        language_code=language_code,
-        max_alternatives=1,
-        enable_word_time_offsets=False,
-        enable_automatic_punctuation=True)
-
-    streaming_config = speech.types.StreamingRecognitionConfig(
-        config=config,
-        interim_results=True)
-
-    def audioGenerator(voiceQueue,sid):
-        MAX_RETRY = 7
-        SEP_DURATION = 20
-        timename = time.strftime('%Y-%m-%d_%H:%M:%S',time.localtime(time.time()))
-        timeoutCnt = 0
-        lastTimeoutTime = time.time()
-        with open(RESULT_SAVING_DIR+'{timename}_{sid}.wav'.format(timename=timename,sid=sid),'wb') as f:
-            while True:
-                try:
-                    chunk = voiceQueue.get(timeout=2)
-                    if chunk == "EOF":
-                        _print("收到EOF")
-                        break
-                    else:
-                        print(".",end="",flush=True)
-                        f.write(chunk)
-                        # "yield 音频块"
-                        yield chunk
-                except queue.Empty as e:
-                    timeoutTime = time.time()
-                    timeoutInterval = timeoutTime - lastTimeoutTime
-                    if timeoutCnt >MAX_RETRY and timeoutInterval < SEP_DURATION:
-                        _print("超时重试大于最大重试次数！")
-                        break
-                    else:
-                        # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
-                        # 如果上一次超时时间间隔超过15秒，重新计算时次数,以此分隔计数区间
-                        if timeoutInterval >= 20:
-                            _print_debug("进入新的连续超时计数区间")
-                            lastTimeoutTime = timeoutTime
-                            timeoutCnt = 0
-                        _print("{sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
-                        yield bytes([0,0]) 
-                        timeoutCnt += 1
-
-
-    def eternal_response(streaming_config, voiceQueue):
-
-        def build_responses():
-            # 阻塞直到收到下一个语音包为止，否则会报空包错误
-            voiceQueue.put(voiceQueue.get())
-            
-            audio_generator = audioGenerator(voiceQueue,sid)
-            
-            requests = (speech.types.StreamingRecognizeRequest(audio_content=content) for content in audio_generator)
-
-            responses = client.streaming_recognize(streaming_config, requests)
-
-            responses = (r for r in responses if ( r.results and r.results[0].alternatives))
-            
-            return responses
-
-        try:
-            responses = build_responses()
-            for r in responses:
-                if r.results and r.results[0].alternatives:
-                    yield r
-
-        except google.api_core.exceptions.OutOfRange as e:
-            if "305" in str(e):
-                _print(sid + "超过305秒， 递归","!"*50)
-                for r in eternal_response(streaming_config, voiceQueue):
-                    yield r
-            else:
-                raise e
-
-    item = {"type":"final","result":"声音异常！！！", "bg":"0","ed":"0"}
-
-    cnt = 0
-    num_chars_printed = 0
-
-    # last fianl result end time
-    last_final_offset = 0
-
-    for response in eternal_response(streaming_config, voiceQueue):
-        cnt +=1
-        if not response.results:
-            continue
-
-        # The `results` list is consecutive. For streaming, we only care about
-        # the first result being considered, since once it's `is_final`, it
-        # moves on to considering the next utterance.
-        result = response.results[0]
-        if not result.alternatives:
-            continue
-
-        # Display the transcription of the top alternative.
-        top_alternative = result.alternatives[0]
-        transcript = top_alternative.transcript
-
-        # Display interim results, but with a carriage return at the end of the
-        # line, so subsequent lines will overwrite them.
-        #
-        # If the previous result was longer than this one, we need to #print
-        # some extra spaces to overwrite the previous result
-        overwrite_chars = ' ' * (num_chars_printed - len(transcript))
-        
-        result_seconds = 0
-        result_nanos = 0
-
-        if result.result_end_time.seconds:
-            result_seconds = result.result_end_time.seconds
-
-        if result.result_end_time.nanos:
-            result_nanos = result.result_end_time.nanos
-
-        # result end time since audio start
-        result_end_time = int((result_seconds * 1000)
-                                     + (result_nanos / 1000000))
-
-        if not result.is_final:
-            result = transcript + overwrite_chars + "\n"
-            _print_debug(len(result).__str__() + "个识别字符")
-            num_chars_printed = len(transcript)
-            item = {"type":"partial","result":result}
-        else:
-            result = transcript + overwrite_chars
-            num_chars_printed = 0
-            item = {"type":"final","result":result, "bg":last_final_offset, "ed":result_end_time}
-            last_final_offset = result_end_time
-
-        if item['type'] == 'final':
-            with open(RESULT_SAVING_DIR+'{sid}.txt'.format(sid=sid),'w') as f:
-                f.write(item['result'])
-
-        yield item
-
-    if cnt == 0:
-        yield item
-
-
+def setupRedis():
+    pool = eventlet.GreenPool()
+    pool.spawn(recieve_asr_result)
 
 if __name__ == '__main__':
-    #f = open("flask.log",'a')
-    #sys.stdout = f
-    #sys.stderr = f
-    socketio.run(app, host='0.0.0.0',port=7000,debug=True)
+    eventlet.spawn(recieve_asr_result)
+    run_server()
