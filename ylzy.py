@@ -30,7 +30,7 @@ def recieve_asr_result():
     pubsub.subscribe(ASR_RESULT_CHANNEL)
 
     while True:
-        eventlet.sleep(0.3)
+        eventlet.sleep(0.05)
         item = pubsub.get_message()
         if item is None:
             continue 
