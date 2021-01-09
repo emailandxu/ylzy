@@ -82,11 +82,10 @@ def run_redis():
     user_connect()
 
 class GoogleASR:
-    # --- RETRY ---
-    MAX_RETRY = 7
-    SEP_DURATION = 20
 
     def __init__(self,language_code, sample_rate, sid):
+        self.MAX_RETRY = 7
+        self.SEP_DURATION = 20
         self.streaming_config = GoogleASR.buildConfig(language_code,sample_rate)
         self.sid = sid
         self.voiceQueue = queue.Queue()
@@ -116,14 +115,15 @@ class GoogleASR:
         lastTimeoutTime = time.time()
         while True:
             try:
-                chunk = voiceQueue.get(timeout=2)
+                chunk = voiceQueue.get(timeout=1)
                 if chunk == b"EOF":
                     print("收到EOF")
                     break
                 
                 # print(f"收到大小为{len(chunk)}")
-                
-                yield chunk
+                if chunk is not None:
+                    print(".", end="")
+                    yield chunk
             except queue.Empty as e:
                 print("{self.sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
                 timeoutTime = time.time()
