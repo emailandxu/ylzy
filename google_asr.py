@@ -85,7 +85,7 @@ class GoogleASR:
     # --- RETRY ---
     MAX_RETRY = 7
     SEP_DURATION = 20
-    
+
     def __init__(self,language_code, sample_rate, sid):
         self.streaming_config = GoogleASR.buildConfig(language_code,sample_rate)
         self.sid = sid
@@ -125,6 +125,7 @@ class GoogleASR:
                 
                 yield chunk
             except queue.Empty as e:
+                print("{self.sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
                 timeoutTime = time.time()
                 timeoutInterval = timeoutTime - lastTimeoutTime
                 if timeoutCnt > self.MAX_RETRY and timeoutInterval < self.SEP_DURATION:
@@ -137,7 +138,6 @@ class GoogleASR:
                         print("进入新的连续超时计数区间")
                         lastTimeoutTime = timeoutTime
                         timeoutCnt = 0
-                    print("{self.sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
                     yield bytes([0,0]) 
                     timeoutCnt += 1
 
