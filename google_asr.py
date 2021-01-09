@@ -82,6 +82,9 @@ def run_redis():
     user_connect()
 
 class GoogleASR:
+    # --- RETRY ---
+    MAX_RETRY = 7
+    SEP_DURATION = 20
     
     def __init__(self,language_code, sample_rate, sid):
         self.streaming_config = GoogleASR.buildConfig(language_code,sample_rate)
@@ -117,8 +120,8 @@ class GoogleASR:
                 if chunk == b"EOF":
                     print("收到EOF")
                     break
-                else:
-                    print(f"收到大小为{len(chunk)}")
+                
+                # print(f"收到大小为{len(chunk)}")
                 
                 yield chunk
             except queue.Empty as e:

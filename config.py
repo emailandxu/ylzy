@@ -3,10 +3,6 @@
 LOG = {"screen":True, "file":True, "log_file":open("./log.txt","a"), "debug":False}
 SID_LENGTH = 32
 
-# --- RETRY ---
-MAX_RETRY = 7
-SEP_DURATION = 20
-
 # --- REDIS ---
 REDIS_URL = 'redis://localhost:6379/'
 REDIS_HOST = "localhost"
