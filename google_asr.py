@@ -26,6 +26,7 @@ rds = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT)
 def g_asr_thread(sid, g_asr):
     for result in g_asr():
         rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid,"result": result}))
+    del users["sid"]
 
 def user_connect():
     pubsub = rds.pubsub()
