@@ -84,8 +84,8 @@ def run_redis():
 class GoogleASR:
 
     def __init__(self,language_code, sample_rate, sid):
-        self.MAX_RETRY = 7
-        self.SEP_DURATION = 20
+        self.MAX_RETRY = 30
+        self.SEP_DURATION = 10
         self.streaming_config = GoogleASR.buildConfig(language_code,sample_rate)
         self.sid = sid
         self.voiceQueue = queue.Queue()
@@ -115,7 +115,7 @@ class GoogleASR:
         lastTimeoutTime = time.time()
         while True:
             try:
-                chunk = voiceQueue.get(timeout=1)
+                chunk = voiceQueue.get(timeout=0.2)
                 if chunk == b"EOF":
                     print("收到EOF")
                     break
@@ -134,7 +134,7 @@ class GoogleASR:
                 else:
                     # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
                     # 如果上一次超时时间间隔超过15秒，重新计算时次数,以此分隔计数区间
-                    if timeoutInterval >= 20:
+                    if timeoutInterval >= self.SEP_DURATION:
                         print("进入新的连续超时计数区间")
                         lastTimeoutTime = timeoutTime
                         timeoutCnt = 0
