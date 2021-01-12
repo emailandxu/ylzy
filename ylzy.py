@@ -51,13 +51,15 @@ def recieve_asr_result():
                     logx("client was disconnected!!") # 客户端断开，不会再向服务器器推送音频，语音识别会话也会因此结束。
                 else:
                     raise e
-        if result['type'] in ("partial"):
-            sio.emit("server_partial_response",{'data':result["result"]}, room=sid)
+
+        if result['type'] in ("partial", ):
+            sio.emit("server_partial_response", {'data':result["result"]}, room=sid)
 
         elif result['type'] == "error":
             sio.emit('server_response',{'data': "错误："+ result["result"]}, room=sid)
-    
-    sio.emit("server_response_end",{'data':"正常！"}, room=sid)
+
+        elif result['type'] == 'end':
+            sio.emit("server_response_end",{'data':result["result"]}, room=sid)
 
 @sio.on('connect_event')
 def connected_msg(sid,msg):
@@ -111,4 +113,4 @@ def setupRedis():
 
 if __name__ == '__main__':
     eventlet.spawn(recieve_asr_result)
-    run_exp_server()
+    run_server()

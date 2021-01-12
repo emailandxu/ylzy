@@ -28,13 +28,13 @@ def g_asr_thread(sid, g_asr):
     try:
         for result in g_asr():
             rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid,"result": result}))
-    except google.api_core.exceptions.ServiceUnavailable as e:
+    except Exception as e:
         if "503" in str(e):
+            # google.api_core.exceptions.ServiceUnavailable
             g_asr_thread(sid, g_asr)
-    try:
-        del users[sid]
-    except KeyError as e:
-        print(f"KeyError When Finish:{str(e)}")
+    finally:
+        result = {"type":"end", "result":"正常！"}
+        rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid, "result":result}))
 
 def user_connect():
     pubsub = rds.pubsub()
@@ -62,9 +62,11 @@ def user_disconnect():
             output = json.loads(item['data'])
             sid = output["sid"]
             try:
+                print(f"Disconnect: {sid}, remains {len(users)} clients!")
                 del users[sid]
             except KeyError as e:
-                print(f"Key Error When Disconnect: {str(e)}")
+                
+                print(f"Key Error When Disconnect, remains {len(users)} clients: {str(e)}")
         else:
             print(item)
 
@@ -80,7 +82,7 @@ def recieve_audio():
                 g_asr = users[sid]["g_asr"]
                 g_asr.voiceQueue.put(voiceData)
             except KeyError as e:
-                print("发生键错误，可能是用户未在创建链接时调用connected_msg！")
+                print("接收音频时，发生键错误，可能是用户未在创建链接时调用connected_msg！")
                 print(str(e))
         else:
             print(item)
@@ -122,9 +124,9 @@ class GoogleASR:
     
     @classmethod
     def buildAudioGenerator(cls, voiceQueue, sid):
-        timename = time.strftime('%Y-%m-%d_%H:%M:%S',time.localtime(time.time()))
-        timeoutCnt = 0
-        lastTimeoutTime = time.time()
+        # timename = time.strftime('%Y-%m-%d_%H:%M:%S',time.localtime(time.time()))
+        # timeoutCnt = 0
+        # lastTimeoutTime = time.time()
         while True:
             try:
                 chunk = voiceQueue.get(timeout=2)
@@ -139,22 +141,27 @@ class GoogleASR:
                 else:
                     print("chunk is None")
 
-            except queue.Empty as e:
-                print("{self.sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
-                timeoutTime = time.time()
-                timeoutInterval = timeoutTime - lastTimeoutTime
-                if timeoutCnt > self.MAX_RETRY and timeoutInterval < self.SEP_DURATION:
-                    print("超时重试大于最大重试次数！")
-                    break
-                else:
-                    # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
-                    # 如果上一次超时时间间隔超过15秒，重新计算时次数,以此分隔计数区间
-                    if timeoutInterval >= self.SEP_DURATION:
-                        print("进入新的连续超时计数区间")
-                        lastTimeoutTime = timeoutTime
-                        timeoutCnt = 0
-                    yield bytes([0,0]) 
-                    timeoutCnt += 1
+            except Exception as e:
+                break
+            
+            # except queue.Empty as e:
+            #     print("{self.sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
+            #     timeoutTime = time.time()
+            #     timeoutInterval = timeoutTime - lastTimeoutTime
+            #     if timeoutCnt > self.MAX_RETRY and timeoutInterval < self.SEP_DURATION:
+            #         print("超时重试大于最大重试次数！")
+            #         break
+            #     else:
+            #         # 每15秒一个连续超时计数区间，15秒内连续超时次数大于7次终止服务
+            #         # 如果上一次超时时间间隔超过15秒，重新计算时次数,以此分隔计数区间
+            #         if timeoutInterval >= self.SEP_DURATION:
+            #             print("进入新的连续超时计数区间")
+            #             lastTimeoutTime = timeoutTime
+            #             timeoutCnt = 0
+            #         timeoutCnt += 1
+            #         print("yield 0")
+            #         yield bytes([0,0]) 
+
 
     def _eternal_response(self,client):
         def build_responses():
