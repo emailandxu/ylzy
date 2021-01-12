@@ -56,6 +56,8 @@ def recieve_asr_result():
 
         elif result['type'] == "error":
             sio.emit('server_response',{'data': "错误："+ result["result"]}, room=sid)
+    
+    sio.emit("server_response_end",{'data':"正常！"})
 
 @sio.on('connect_event')
 def connected_msg(sid,msg):

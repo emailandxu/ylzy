@@ -34,7 +34,7 @@ def g_asr_thread(sid, g_asr):
     try:
         del users[sid]
     except KeyError as e:
-        print(str(e))
+        print(f"KeyError When Finish:{str(e)}")
 
 def user_connect():
     pubsub = rds.pubsub()
@@ -64,7 +64,7 @@ def user_disconnect():
             try:
                 del users[sid]
             except KeyError as e:
-                print(str(e))
+                print(f"Key Error When Disconnect: {str(e)}")
         else:
             print(item)
 
