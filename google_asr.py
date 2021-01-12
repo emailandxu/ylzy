@@ -48,9 +48,9 @@ def user_connect():
 
             g_asr = GoogleASR(sid=sid, **config)
             trd = Thread(target=g_asr_thread, args=(sid,g_asr))
+            users[sid] = {"g_asr":g_asr, "thread":trd}
             trd.start()
 
-            users[sid] = {"g_asr":g_asr, "thread":trd}
 
         else:
             print(item)
