@@ -33,6 +33,7 @@ def g_asr_thread(sid, g_asr):
             # google.api_core.exceptions.ServiceUnavailable
             g_asr_thread(sid, g_asr)
     finally:
+        print("end"+ "!"*10)
         result = {"type":"end", "result":"正常！"}
         rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid, "result":result}))
 
