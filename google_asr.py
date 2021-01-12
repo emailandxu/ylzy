@@ -24,9 +24,17 @@ users = {
 rds = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT)
 
 def g_asr_thread(sid, g_asr):
-    for result in g_asr():
-        rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid,"result": result}))
-    del users["sid"]
+    print(f"开始识别：{sid}")
+    try:
+        for result in g_asr():
+            rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid,"result": result}))
+    except google.api_core.exceptions.ServiceUnavailable as e:
+        if "503" in str(e):
+            g_asr_thread(sid, g_asr)
+    try:
+        del users[sid]
+    except KeyError as e:
+        print(str(e))
 
 def user_connect():
     pubsub = rds.pubsub()
@@ -53,7 +61,10 @@ def user_disconnect():
         if item['type'] == 'message':
             output = json.loads(item['data'])
             sid = output["sid"]
-            del users[sid]
+            try:
+                del users[sid]
+            except KeyError as e:
+                print(str(e))
         else:
             print(item)
 
@@ -116,15 +127,18 @@ class GoogleASR:
         lastTimeoutTime = time.time()
         while True:
             try:
-                chunk = voiceQueue.get(timeout=0.2)
+                chunk = voiceQueue.get(timeout=2)
                 if chunk == b"EOF":
                     print("收到EOF")
                     break
                 
-                # print(f"收到大小为{len(chunk)}")
+                # print(f"{time.time()}:收到大小为{len(chunk)}")
                 if chunk is not None:
-                    print(".", end="")
+                    print(".", end="", flush=True)
                     yield chunk
+                else:
+                    print("chunk is None")
+
             except queue.Empty as e:
                 print("{self.sid}: 超时重试第{timeoutCnt}次！".format(sid=sid, timeoutCnt=timeoutCnt))
                 timeoutTime = time.time()
@@ -158,7 +172,7 @@ class GoogleASR:
                     yield r
         except google.api_core.exceptions.OutOfRange as e:
             if "305" in str(e):
-                print(sid + "超过305秒， 递归","!"*50)
+                print(self.sid + "超过305秒， 递归","!"*50)
                 for r in self._eternal_response(client):
                     yield r
             else:
@@ -214,7 +228,7 @@ class GoogleASR:
 
             if not result.is_final:
                 result = transcript + overwrite_chars + "\n"
-                print(len(result).__str__() + "个识别字符")
+                print(len(result).__str__() + "个识别字符:" + f"{result}")
                 num_charsprinted = len(transcript)
                 output = {"type":"partial","result":result}
             else:
