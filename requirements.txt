@@ -46,3 +46,4 @@ urllib3==1.25.7
 vine==5.0.0
 wcwidth==0.2.5
 Werkzeug==1.0.1
+websockets==8.1
