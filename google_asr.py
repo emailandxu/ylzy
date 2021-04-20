@@ -27,15 +27,27 @@ def g_asr_thread(sid, g_asr):
     print(f"开始识别：{sid}")
     try:
         for result in g_asr():
+            # for socketio
             rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid,"result": result}))
+
+            # for websocket
+            rds.publish(ASR_RESULT_CHANNEL + sid, json.dumps({"sid":sid,"result": result}))
+
     except Exception as e:
         if "503" in str(e):
             # google.api_core.exceptions.ServiceUnavailable
             g_asr_thread(sid, g_asr)
+        print(e)
     finally:
         print("end"+ "!"*10)
         result = {"type":"end", "result":"正常！"}
+
+        # for socketio
         rds.publish(ASR_RESULT_CHANNEL, json.dumps({"sid":sid, "result":result}))
+
+        # for websocket
+        rds.publish(ASR_RESULT_CHANNEL + sid, json.dumps({"sid":sid,"result": result}))
+
 
 def user_connect():
     pubsub = rds.pubsub()
