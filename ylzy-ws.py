@@ -41,6 +41,7 @@ async def generalHandler(websocket, path):
             config = init_msg["config"]
 
             # register the client
+            print(f"register client {sid}")
             rds.publish(CONNECT_CHANNEL, json.dumps({"sid":sid, "config":config}))
 
         except Exception as e:
@@ -60,7 +61,7 @@ async def generalHandler(websocket, path):
         while True:
             await asyncio.sleep(0.2)
 
-            # message = await producer(sid)
+            message = await producer(sid)
             # await websocket.send(message)
 
     sid = await create_session(websocket, path)
@@ -92,7 +93,6 @@ async def generalHandler(websocket, path):
 
 async def consumer(msg, sid):
     try:
-        print(len(msg), type(msg))
         voiceData = msg
         # voiceData = msg['voiceData']
     except KeyError as e:
@@ -114,7 +114,8 @@ async def consumer(msg, sid):
         voiceData = voiceData.encode()
     
     # json doesn't support serialize bytes
-    rds.publish(AUDIO_CHANNEL, sid.encode() + voiceData )
+    print( len(voiceData), type(voiceData) )
+    rds.publish( AUDIO_CHANNEL, sid.encode() + voiceData )
 
 async def producer(sid):
     await asyncio.sleep(random.randint(0,10)*0.1 )
@@ -123,14 +124,16 @@ async def producer(sid):
 
     while True:
         item = pubsub.get_message()
-        if item is None:
+        print("!"*20,item)
+
+        if item is not None:
             break
 
-    output = json.loads(item['data'])
-    sid = output["sid"]
-    result = output["result"]
+    # output = json.loads(item['data'])
+    # sid = output["sid"]
+    # result = output["result"]
 
-    return result
+    return "result"
 
 
 
